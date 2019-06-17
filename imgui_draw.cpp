@@ -1,4 +1,4 @@
-// dear imgui, v1.72 WIP
+// dear imgui, v1.71 WIP
 // (drawing and font code)
 
 /*
@@ -72,12 +72,13 @@ Index of this file:
 #pragma clang diagnostic ignored "-Wdouble-promotion"       // warning: implicit conversion from 'float' to 'double' when passing argument to function  // using printf() is a misery with this as C++ va_arg ellipsis changes float to double.
 #endif
 #elif defined(__GNUC__)
-#pragma GCC diagnostic ignored "-Wpragmas"                  // warning: unknown option after '#pragma GCC diagnostic' kind
 #pragma GCC diagnostic ignored "-Wunused-function"          // warning: 'xxxx' defined but not used
 #pragma GCC diagnostic ignored "-Wdouble-promotion"         // warning: implicit conversion from 'float' to 'double' when passing argument to function
 #pragma GCC diagnostic ignored "-Wconversion"               // warning: conversion to 'xxxx' from 'xxxx' may alter its value
 #pragma GCC diagnostic ignored "-Wstack-protector"          // warning: stack protector not protecting local variables: variable length buffer
-#pragma GCC diagnostic ignored "-Wclass-memaccess"          // [__GNUC__ >= 8] warning: 'memset/memcpy' clearing/writing an object of type 'xxxx' with no trivial copy-assignment; use assignment or value-initialization instead
+#if __GNUC__ >= 8
+#pragma GCC diagnostic ignored "-Wclass-memaccess"          // warning: 'memset/memcpy' clearing/writing an object of type 'xxxx' with no trivial copy-assignment; use assignment or value-initialization instead
+#endif
 #endif
 
 //-------------------------------------------------------------------------
@@ -364,7 +365,7 @@ void ImDrawList::Clear()
     CmdBuffer.resize(0);
     IdxBuffer.resize(0);
     VtxBuffer.resize(0);
-    Flags = _Data ? _Data->InitialFlags : ImDrawListFlags_None;
+    Flags = _Data->InitialFlags;
     _VtxCurrentOffset = 0;
     _VtxCurrentIdx = 0;
     _VtxWritePtr = NULL;
@@ -391,7 +392,7 @@ void ImDrawList::ClearFreeMemory()
 
 ImDrawList* ImDrawList::CloneOutput() const
 {
-    ImDrawList* dst = IM_NEW(ImDrawList(_Data));
+    ImDrawList* dst = IM_NEW(ImDrawList(NULL));
     dst->CmdBuffer = CmdBuffer;
     dst->IdxBuffer = IdxBuffer;
     dst->VtxBuffer = VtxBuffer;
@@ -1132,6 +1133,43 @@ void ImDrawList::AddText(const ImVec2& pos, ImU32 col, const char* text_begin, c
     AddText(NULL, 0.0f, pos, col, text_begin, text_end);
 }
 
+void ImDrawList::AddTextVertical(const ImFont* font, float font_size, const ImVec2& pos, ImU32 col, const char* text_begin, bool rotateCCW, const char* text_end , float wrap_width, const ImVec4* cpu_fine_clip_rect)
+{
+    if ((col >> 24) == 0)
+        return;
+
+    if (text_end == NULL)
+        text_end = text_begin + strlen(text_begin);
+    if (text_begin == text_end)
+        return;
+
+    // Note: This is one of the few instance of breaking the encapsulation of ImDrawList, as we pull this from ImGui state, but it is just SO useful.
+    // Might just move Font/FontSize to ImDrawList?
+    if (font == NULL)
+        font = GImGui->Font;
+    if (font_size == 0.0f)
+        font_size = GImGui->FontSize;
+
+    //IM_ASSERT(drawList && font->ContainerAtlas->TexID == drawList->_TextureIdStack.back());  // Use high-level ImGui::PushFont() or low-level ImDrawList::PushTextureId() to change font.
+    IM_ASSERT(font->ContainerAtlas->TexID == _TextureIdStack.back());
+
+    ImVec4 clip_rect = _ClipRectStack.back();
+    if (cpu_fine_clip_rect)
+    {
+        clip_rect.x = ImMax(clip_rect.x, cpu_fine_clip_rect->x);
+        clip_rect.y = ImMax(clip_rect.y, cpu_fine_clip_rect->y);
+        clip_rect.z = ImMin(clip_rect.z, cpu_fine_clip_rect->z);
+        clip_rect.w = ImMin(clip_rect.w, cpu_fine_clip_rect->w);
+    }
+    font->RenderTextVertical(this, font_size, pos, col, clip_rect, text_begin, text_end, wrap_width, cpu_fine_clip_rect != NULL, rotateCCW);
+
+}
+
+void ImDrawList::AddTextVertical(const ImVec2& pos, ImU32 col, const char* text_begin, bool rotateCCW,const char* text_end)
+{
+    AddTextVertical(NULL, 0.0f, pos, col, text_begin, rotateCCW, text_end);
+}
+
 void ImDrawList::AddImage(ImTextureID user_texture_id, const ImVec2& a, const ImVec2& b, const ImVec2& uv_a, const ImVec2& uv_b, ImU32 col)
 {
     if ((col & IM_COL32_A_MASK) == 0)
@@ -1202,8 +1240,8 @@ void ImDrawListSplitter::ClearFreeMemory()
     {
         if (i == _Current) 
             memset(&_Channels[i], 0, sizeof(_Channels[i]));  // Current channel is a copy of CmdBuffer/IdxBuffer, don't destruct again
-        _Channels[i]._CmdBuffer.clear();
-        _Channels[i]._IdxBuffer.clear();
+        _Channels[i].CmdBuffer.clear();
+        _Channels[i].IdxBuffer.clear();
     }
     _Current = 0;
     _Count = 1;
@@ -1230,22 +1268,22 @@ void ImDrawListSplitter::Split(ImDrawList* draw_list, int channels_count)
         }
         else
         {
-            _Channels[i]._CmdBuffer.resize(0);
-            _Channels[i]._IdxBuffer.resize(0);
+            _Channels[i].CmdBuffer.resize(0);
+            _Channels[i].IdxBuffer.resize(0);
         }
-        if (_Channels[i]._CmdBuffer.Size == 0)
+        if (_Channels[i].CmdBuffer.Size == 0)
         {
             ImDrawCmd draw_cmd;
             draw_cmd.ClipRect = draw_list->_ClipRectStack.back();
             draw_cmd.TextureId = draw_list->_TextureIdStack.back();
-            _Channels[i]._CmdBuffer.push_back(draw_cmd);
+            _Channels[i].CmdBuffer.push_back(draw_cmd);
         }
     }
 }
 
 static inline bool CanMergeDrawCommands(ImDrawCmd* a, ImDrawCmd* b)
 {
-    return memcmp(&a->ClipRect, &b->ClipRect, sizeof(a->ClipRect)) == 0 && a->TextureId == b->TextureId && a->VtxOffset == b->VtxOffset && !a->UserCallback && !b->UserCallback;
+    return memcmp(&a->ClipRect, &b->ClipRect, sizeof(a->ClipRect)) == 0 && a->TextureId == b->TextureId && !a->UserCallback && !b->UserCallback;
 }
 
 void ImDrawListSplitter::Merge(ImDrawList* draw_list)
@@ -1261,28 +1299,27 @@ void ImDrawListSplitter::Merge(ImDrawList* draw_list)
     // Calculate our final buffer sizes. Also fix the incorrect IdxOffset values in each command.
     int new_cmd_buffer_count = 0;
     int new_idx_buffer_count = 0;
-    ImDrawCmd* last_cmd = (_Count > 0 && draw_list->CmdBuffer.Size > 0) ? &draw_list->CmdBuffer.back() : NULL;
+    ImDrawCmd* last_cmd = (_Count > 0 && _Channels[0].CmdBuffer.Size > 0) ? &_Channels[0].CmdBuffer.back() : NULL;
     int idx_offset = last_cmd ? last_cmd->IdxOffset + last_cmd->ElemCount : 0;
     for (int i = 1; i < _Count; i++)
     {
         ImDrawChannel& ch = _Channels[i];
-        if (ch._CmdBuffer.Size > 0 && ch._CmdBuffer.back().ElemCount == 0)
-            ch._CmdBuffer.pop_back();
-        if (ch._CmdBuffer.Size > 0 && last_cmd != NULL && CanMergeDrawCommands(last_cmd, &ch._CmdBuffer[0]))
+        if (ch.CmdBuffer.Size && ch.CmdBuffer.back().ElemCount == 0)
+            ch.CmdBuffer.pop_back();
+        else if (ch.CmdBuffer.Size > 0 && last_cmd != NULL && CanMergeDrawCommands(last_cmd, &ch.CmdBuffer[0]))
         {
             // Merge previous channel last draw command with current channel first draw command if matching.
-            last_cmd->ElemCount += ch._CmdBuffer[0].ElemCount;
-            idx_offset += ch._CmdBuffer[0].ElemCount;
-            ch._CmdBuffer.erase(ch._CmdBuffer.Data);
+            last_cmd->ElemCount += ch.CmdBuffer[0].ElemCount;
+            ch.CmdBuffer.erase(ch.CmdBuffer.Data);
         }
-        if (ch._CmdBuffer.Size > 0)
-            last_cmd = &ch._CmdBuffer.back();
-        new_cmd_buffer_count += ch._CmdBuffer.Size;
-        new_idx_buffer_count += ch._IdxBuffer.Size;
-        for (int cmd_n = 0; cmd_n < ch._CmdBuffer.Size; cmd_n++)
+        if (ch.CmdBuffer.Size > 0)
+            last_cmd = &ch.CmdBuffer.back();
+        new_cmd_buffer_count += ch.CmdBuffer.Size;
+        new_idx_buffer_count += ch.IdxBuffer.Size;
+        for (int cmd_n = 0; cmd_n < ch.CmdBuffer.Size; cmd_n++)
         {
-            ch._CmdBuffer.Data[cmd_n].IdxOffset = idx_offset;
-            idx_offset += ch._CmdBuffer.Data[cmd_n].ElemCount;
+            ch.CmdBuffer.Data[cmd_n].IdxOffset = idx_offset;
+            idx_offset += ch.CmdBuffer.Data[cmd_n].ElemCount;
         }
     }
     draw_list->CmdBuffer.resize(draw_list->CmdBuffer.Size + new_cmd_buffer_count);
@@ -1294,8 +1331,8 @@ void ImDrawListSplitter::Merge(ImDrawList* draw_list)
     for (int i = 1; i < _Count; i++)
     {
         ImDrawChannel& ch = _Channels[i];
-        if (int sz = ch._CmdBuffer.Size) { memcpy(cmd_write, ch._CmdBuffer.Data, sz * sizeof(ImDrawCmd)); cmd_write += sz; }
-        if (int sz = ch._IdxBuffer.Size) { memcpy(idx_write, ch._IdxBuffer.Data, sz * sizeof(ImDrawIdx)); idx_write += sz; }
+        if (int sz = ch.CmdBuffer.Size) { memcpy(cmd_write, ch.CmdBuffer.Data, sz * sizeof(ImDrawCmd)); cmd_write += sz; }
+        if (int sz = ch.IdxBuffer.Size) { memcpy(idx_write, ch.IdxBuffer.Data, sz * sizeof(ImDrawIdx)); idx_write += sz; }
     }
     draw_list->_IdxWritePtr = idx_write;
     draw_list->UpdateClipRect(); // We call this instead of AddDrawCmd(), so that empty channels won't produce an extra draw call.
@@ -1308,11 +1345,11 @@ void ImDrawListSplitter::SetCurrentChannel(ImDrawList* draw_list, int idx)
     if (_Current == idx) 
         return;
     // Overwrite ImVector (12/16 bytes), four times. This is merely a silly optimization instead of doing .swap()
-    memcpy(&_Channels.Data[_Current]._CmdBuffer, &draw_list->CmdBuffer, sizeof(draw_list->CmdBuffer));
-    memcpy(&_Channels.Data[_Current]._IdxBuffer, &draw_list->IdxBuffer, sizeof(draw_list->IdxBuffer));
+    memcpy(&_Channels.Data[_Current].CmdBuffer, &draw_list->CmdBuffer, sizeof(draw_list->CmdBuffer));
+    memcpy(&_Channels.Data[_Current].IdxBuffer, &draw_list->IdxBuffer, sizeof(draw_list->IdxBuffer));
     _Current = idx;
-    memcpy(&draw_list->CmdBuffer, &_Channels.Data[idx]._CmdBuffer, sizeof(draw_list->CmdBuffer));
-    memcpy(&draw_list->IdxBuffer, &_Channels.Data[idx]._IdxBuffer, sizeof(draw_list->IdxBuffer));
+    memcpy(&draw_list->CmdBuffer, &_Channels.Data[idx].CmdBuffer, sizeof(draw_list->CmdBuffer));
+    memcpy(&draw_list->IdxBuffer, &_Channels.Data[idx].IdxBuffer, sizeof(draw_list->IdxBuffer));
     draw_list->_IdxWritePtr = draw_list->IdxBuffer.Data + draw_list->IdxBuffer.Size;
 }
 
@@ -1433,7 +1470,7 @@ ImFontConfig::ImFontConfig()
 //-----------------------------------------------------------------------------
 
 // A work of art lies ahead! (. = white layer, X = black layer, others are blank)
-// The white texels on the top left are the ones we'll use everywhere in Dear ImGui to render filled shapes.
+// The white texels on the top left are the ones we'll use everywhere in ImGui to render filled shapes.
 const int FONT_ATLAS_DEFAULT_TEX_DATA_W_HALF = 108;
 const int FONT_ATLAS_DEFAULT_TEX_DATA_H      = 27;
 const unsigned int FONT_ATLAS_DEFAULT_TEX_DATA_ID = 0x80000000;
@@ -2817,7 +2854,7 @@ void ImFont::RenderChar(ImDrawList* draw_list, float size, ImVec2 pos, ImU32 col
 void ImFont::RenderText(ImDrawList* draw_list, float size, ImVec2 pos, ImU32 col, const ImVec4& clip_rect, const char* text_begin, const char* text_end, float wrap_width, bool cpu_fine_clip) const
 {
     if (!text_end)
-        text_end = text_begin + strlen(text_begin); // ImGui:: functions generally already provides a valid text_end, so this is merely to handle direct calls.
+        text_end = text_begin + strlen(text_begin); // ImGui functions generally already provides a valid text_end, so this is merely to handle direct calls.
 
     // Align to be pixel perfect
     pos.x = (float)(int)pos.x + DisplayOffset.x;
@@ -3003,6 +3040,205 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, ImVec2 pos, ImU32 col
     draw_list->_VtxCurrentIdx = vtx_current_idx;
 }
 
+void ImFont::RenderTextVertical(ImDrawList* draw_list, float size, ImVec2 pos, ImU32 col, const ImVec4& clip_rect, const char* text_begin, const char* text_end, float wrap_width, bool cpu_fine_clip, bool rotateCCW) const
+{
+    if (!text_end) text_end = text_begin + strlen(text_begin);
+
+    const float scale = size / FontSize;
+    // Align to be pixel perfect
+    pos.x = (float)(int)pos.x;// + (rotateCCW ? (font->FontSize-font->DisplayOffset.y) : 0);  // Not sure it's correct
+    pos.y = (float)(int)pos.y + DisplayOffset.x;
+    float x = pos.x;
+    float y = pos.y;
+    if (x > clip_rect.z)
+        return;
+
+    const float line_height = FontSize * scale;
+    const bool word_wrap_enabled = (wrap_width > 0.0f);
+    const char* word_wrap_eol = NULL;
+    const float y_dir = rotateCCW ? -1.f : 1.f;
+
+    // Skip non-visible lines
+    const char* s = text_begin;
+    if (!word_wrap_enabled && y + line_height < clip_rect.y)
+        while (s < text_end && *s != '\n')  // Fast-forward to next line
+            s++;
+
+    // Reserve vertices for remaining worse case (over-reserving is useful and easily amortized)
+    const int vtx_count_max = (int)(text_end - s) * 4;
+    const int idx_count_max = (int)(text_end - s) * 6;
+    const int idx_expected_size = draw_list->IdxBuffer.Size + idx_count_max;
+    draw_list->PrimReserve(idx_count_max, vtx_count_max);
+
+    ImDrawVert* vtx_write = draw_list->_VtxWritePtr;
+    ImDrawIdx* idx_write = draw_list->_IdxWritePtr;
+    unsigned int vtx_current_idx = draw_list->_VtxCurrentIdx;
+    float x1 = 0.f, x2 = 0.f, y1 = 0.f, y2 = 0.f;
+
+    while (s < text_end)
+    {
+        if (word_wrap_enabled)
+        {
+            // Calculate how far we can render. Requires two passes on the string data but keeps the code simple and not intrusive for what's essentially an uncommon feature.
+            if (!word_wrap_eol)
+            {
+                word_wrap_eol = CalcWordWrapPositionA(scale, s, text_end, wrap_width - (y - pos.y));
+                if (word_wrap_eol == s) // Wrap_width is too small to fit anything. Force displaying 1 character to minimize the height discontinuity.
+                    word_wrap_eol++;    // +1 may not be a character start point in UTF-8 but it's ok because we use s >= word_wrap_eol below
+            }
+
+            if (s >= word_wrap_eol)
+            {
+                y = pos.y;
+                x += line_height;
+                word_wrap_eol = NULL;
+
+                // Wrapping skips upcoming blanks
+                while (s < text_end)
+                {
+                    const char c = *s;
+                    if (ImCharIsBlankA(c)) { s++; }
+                    else if (c == '\n') { s++; break; }
+                    else { break; }
+                }
+                continue;
+            }
+        }
+
+        // Decode and advance source
+        unsigned int c = (unsigned int)*s;
+        if (c < 0x80)
+        {
+            s += 1;
+        }
+        else
+        {
+            s += ImTextCharFromUtf8(&c, s, text_end);
+            if (c == 0)
+                break;
+        }
+
+        if (c < 32)
+        {
+            if (c == '\n')
+            {
+                y = pos.y;
+                x += line_height;
+
+                if (x > clip_rect.z)
+                    break;
+                if (!word_wrap_enabled && x + line_height < clip_rect.x)
+                    while (s < text_end && *s != '\n')  // Fast-forward to next line
+                        s++;
+                continue;
+            }
+            if (c == '\r')
+                continue;
+        }
+
+        float char_width = 0.0f;
+        if (const ImFont::Glyph* glyph = FindGlyph((unsigned short)c))
+        {
+            char_width = glyph->AdvanceX * scale;
+
+            // Arbitrarily assume that both space and tabs are empty glyphs as an optimization
+            if (c != ' ' && c != '\t')
+            {
+                // We don't do a second finer clipping test on the Y axis as we've already skipped anything before clip_rect.y and exit once we pass clip_rect.w
+                if (!rotateCCW) {
+                    x1 = x + (FontSize - glyph->Y1) * scale;
+                    x2 = x + (FontSize - glyph->Y0) * scale;
+                    y1 = y + glyph->X0 * scale;
+                    y2 = y + glyph->X1 * scale;
+                }
+                else {
+                    x1 = x + glyph->Y0 * scale;
+                    x2 = x + glyph->Y1 * scale;
+                    y1 = y + glyph->X0 * scale;
+                    y2 = y + glyph->X1 * scale;
+                }
+                if (y1 <= clip_rect.w && y2 >= clip_rect.y)
+                {
+                    // Render a character
+                    float u1 = glyph->U0;
+                    float v1 = glyph->V0;
+                    float u2 = glyph->U1;
+                    float v2 = glyph->V1;
+
+                    // CPU side clipping used to fit text in their frame when the frame is too small. Only does clipping for axis aligned quads.
+                    if (cpu_fine_clip)
+                    {
+                        if (x1 < clip_rect.x)
+                        {
+                            u1 = u1 + (1.0f - (x2 - clip_rect.x) / (x2 - x1)) * (u2 - u1);
+                            x1 = clip_rect.x;
+                        }
+                        if (y1 < clip_rect.y)
+                        {
+                            v1 = v1 + (1.0f - (y2 - clip_rect.y) / (y2 - y1)) * (v2 - v1);
+                            y1 = clip_rect.y;
+                        }
+                        if (x2 > clip_rect.z)
+                        {
+                            u2 = u1 + ((clip_rect.z - x1) / (x2 - x1)) * (u2 - u1);
+                            x2 = clip_rect.z;
+                        }
+                        if (y2 > clip_rect.w)
+                        {
+                            v2 = v1 + ((clip_rect.w - y1) / (y2 - y1)) * (v2 - v1);
+                            y2 = clip_rect.w;
+                        }
+                        if (x1 >= x2)
+                        {
+                            y += char_width * y_dir;
+                            continue;
+                        }
+                    }
+
+                    // We are NOT calling PrimRectUV() here because non-inlined causes too much overhead in a debug build.
+                    // Inlined here:
+                    {
+                        idx_write[0] = (ImDrawIdx)(vtx_current_idx); idx_write[1] = (ImDrawIdx)(vtx_current_idx + 1); idx_write[2] = (ImDrawIdx)(vtx_current_idx + 2);
+                        idx_write[3] = (ImDrawIdx)(vtx_current_idx); idx_write[4] = (ImDrawIdx)(vtx_current_idx + 2); idx_write[5] = (ImDrawIdx)(vtx_current_idx + 3);
+                        vtx_write[0].col = vtx_write[1].col = vtx_write[2].col = vtx_write[3].col = col;
+                        vtx_write[0].pos.x = x1; vtx_write[0].pos.y = y1;
+                        vtx_write[1].pos.x = x2; vtx_write[1].pos.y = y1;
+                        vtx_write[2].pos.x = x2; vtx_write[2].pos.y = y2;
+                        vtx_write[3].pos.x = x1; vtx_write[3].pos.y = y2;
+
+                        if (rotateCCW) {
+                            vtx_write[0].uv.x = u2; vtx_write[0].uv.y = v1;
+                            vtx_write[1].uv.x = u2; vtx_write[1].uv.y = v2;
+                            vtx_write[2].uv.x = u1; vtx_write[2].uv.y = v2;
+                            vtx_write[3].uv.x = u1; vtx_write[3].uv.y = v1;
+                        }
+                        else {
+                            vtx_write[0].uv.x = u1; vtx_write[0].uv.y = v2;
+                            vtx_write[1].uv.x = u1; vtx_write[1].uv.y = v1;
+                            vtx_write[2].uv.x = u2; vtx_write[2].uv.y = v1;
+                            vtx_write[3].uv.x = u2; vtx_write[3].uv.y = v2;
+                        }
+
+                        vtx_write += 4;
+                        vtx_current_idx += 4;
+                        idx_write += 6;
+                    }
+                }
+            }
+        }
+
+        y += char_width * y_dir;
+    }
+
+    // Give back unused vertices
+    draw_list->VtxBuffer.resize((int)(vtx_write - draw_list->VtxBuffer.Data));
+    draw_list->IdxBuffer.resize((int)(idx_write - draw_list->IdxBuffer.Data));
+    draw_list->CmdBuffer[draw_list->CmdBuffer.Size - 1].ElemCount -= (idx_expected_size - draw_list->IdxBuffer.Size);
+    draw_list->_VtxWritePtr = vtx_write;
+    draw_list->_IdxWritePtr = idx_write;
+    draw_list->_VtxCurrentIdx = (unsigned int)draw_list->VtxBuffer.Size;
+}
+
 //-----------------------------------------------------------------------------
 // [SECTION] Internal Render Helpers
 // (progressively moved from imgui.cpp to here when they are redesigned to stop accessing ImGui global state)
@@ -3123,7 +3359,7 @@ void ImGui::RenderRectFilledRangeH(ImDrawList* draw_list, const ImRect& rect, Im
 // FIXME: Rendering an ellipsis "..." is a surprisingly tricky problem for us... we cannot rely on font glyph having it,
 // and regular dot are typically too wide. If we render a dot/shape ourselves it comes with the risk that it wouldn't match
 // the boldness or positioning of what the font uses...
-void ImGui::RenderPixelEllipsis(ImDrawList* draw_list, ImVec2 pos, ImU32 col, int count)
+void ImGui::RenderPixelEllipsis(ImDrawList* draw_list, ImVec2 pos, int count, ImU32 col)
 {
     ImFont* font = draw_list->_Data->Font;
     const float font_scale = draw_list->_Data->FontSize / font->FontSize;

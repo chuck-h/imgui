@@ -1,4 +1,4 @@
-// dear imgui, v1.72 WIP
+// dear imgui, v1.71 WIP
 // (demo code)
 
 // Message to the person tempted to delete this file when integrating Dear ImGui into their code base:
@@ -17,18 +17,9 @@
 // In this demo code, we frequently we use 'static' variables inside functions. A static variable persist across calls, so it is
 // essentially like a global variable but declared inside the scope of the function. We do this as a way to gather code and data
 // in the same place, to make the demo source code faster to read, faster to write, and smaller in size.
-// It also happens to be a convenient way of storing simple UI related information as long as your function doesn't need to be 
-// reentrant or used in multiple threads. This might be a pattern you will want to use in your code, but most of the real data
-// you would be editing is likely going to be stored outside your functions.
-
-// The Demo code is this file is designed to be easy to copy-and-paste in into your application!
-// Because of this:
-// - We never omit the ImGui:: namespace when calling functions, even though most of our code is already in the same namespace.
-// - We try to declare static variables in the local scope, as close as possible to the code using them.
-// - We never use any of the helpers/facilities used internally by dear imgui, unless it has been exposed in the public API (imgui.h).
-// - We never use maths operators on ImVec2/ImVec4. For other imgui sources files, they are provided by imgui_internal.h w/ IMGUI_DEFINE_MATH_OPERATORS,
-//   for your own sources file they are optional and require you either enable those, either provide your own via IM_VEC2_CLASS_EXTRA in imconfig.h.
-//   Because we don't want to assume anything about your support of maths operators, we don't use them in imgui_demo.cpp.
+// It also happens to be a convenient way of storing simple UI related information as long as your function doesn't need to be reentrant
+// or used in threads. This might be a pattern you will want to use in your code, but most of the real data you would be editing is
+// likely going to be stored outside your functions.
 
 /*
 
@@ -89,12 +80,13 @@ Index of this file:
 #pragma clang diagnostic ignored "-Wreserved-id-macro"          // warning : macro name is a reserved identifier                //
 #endif
 #elif defined(__GNUC__)
-#pragma GCC diagnostic ignored "-Wpragmas"                      // warning: unknown option after '#pragma GCC diagnostic' kind
 #pragma GCC diagnostic ignored "-Wint-to-pointer-cast"          // warning: cast to pointer from integer of different size
 #pragma GCC diagnostic ignored "-Wformat-security"              // warning : format string is not a string literal (potentially insecure)
 #pragma GCC diagnostic ignored "-Wdouble-promotion"             // warning: implicit conversion from 'float' to 'double' when passing argument to function
 #pragma GCC diagnostic ignored "-Wconversion"                   // warning: conversion to 'xxxx' from 'xxxx' may alter its value
-#pragma GCC diagnostic ignored "-Wmisleading-indentation"       // [__GNUC__ >= 6] warning: this 'if' clause does not guard this statement      // GCC 6.0+ only. See #883 on GitHub.
+#if (__GNUC__ >= 6)
+#pragma GCC diagnostic ignored "-Wmisleading-indentation"       // warning: this 'if' clause does not guard this statement      // GCC 6.0+ only. See #883 on GitHub.
+#endif
 #endif
 
 // Play it nice with Windows users. Notepad in 2017 still doesn't display text data with Unix-style \n.
@@ -455,15 +447,17 @@ static void ShowDemoWindowWidgets()
         ImGui::SameLine();
 
         // Arrow buttons with Repeater
-        static int counter = 0;
+        static int counter = 1;
         float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
         ImGui::PushButtonRepeat(true);
         if (ImGui::ArrowButton("##left", ImGuiDir_Left)) { counter--; }
+        ImGui::SameLine();
+        //ImGui::Text("%d", counter);
+        ImGui::InputScalar("##input_u8", ImGuiDataType_U8, &counter, NULL, NULL, "%u");
         ImGui::SameLine(0.0f, spacing);
         if (ImGui::ArrowButton("##right", ImGuiDir_Right)) { counter++; }
         ImGui::PopButtonRepeat();
-        ImGui::SameLine();
-        ImGui::Text("%d", counter);
+
 
         ImGui::Text("Hover over me");
         if (ImGui::IsItemHovered())
@@ -2058,21 +2052,14 @@ static void ShowDemoWindowLayout()
         HelpMarker("Use SetScrollHereY() or SetScrollFromPosY() to scroll to a given position.");
 
         static bool track = true;
-        static int track_line = 50;
-        static float scroll_to_off_px = 0.0f;
-        static float scroll_to_pos_px = 200.0f;
+        static int track_line = 50, scroll_to_px = 200;
         ImGui::Checkbox("Track", &track);
         ImGui::PushItemWidth(100);
-        ImGui::SameLine(140); track |= ImGui::DragInt("##line", &track_line, 0.25f, 0, 99, "Line = %d");
-
-        bool scroll_to_off = ImGui::Button("Scroll Offset");
-        ImGui::SameLine(140); scroll_to_off |= ImGui::DragFloat("##off_y", &scroll_to_off_px, 1.00f, 0, 9999, "+%.0f px");
-
-        bool scroll_to_pos = ImGui::Button("Scroll To Pos");
-        ImGui::SameLine(140); scroll_to_pos |= ImGui::DragFloat("##pos_y", &scroll_to_pos_px, 1.00f, 0, 9999, "Y = %.0f px");
-
+        ImGui::SameLine(130); track |= ImGui::DragInt("##line", &track_line, 0.25f, 0, 99, "Line = %d");
+        bool scroll_to = ImGui::Button("Scroll To Pos");
+        ImGui::SameLine(130); scroll_to |= ImGui::DragInt("##pos_y", &scroll_to_px, 1.00f, 0, 9999, "Y = %d px");
         ImGui::PopItemWidth();
-        if (scroll_to_off || scroll_to_pos)
+        if (scroll_to) 
             track = false;
 
         ImGuiStyle& style = ImGui::GetStyle();
@@ -2082,13 +2069,9 @@ static void ShowDemoWindowLayout()
             if (i > 0) ImGui::SameLine();
             ImGui::BeginGroup();
             ImGui::Text("%s", i == 0 ? "Top" : i == 1 ? "25%" : i == 2 ? "Center" : i == 3 ? "75%" : "Bottom");
-
-            ImGuiWindowFlags child_flags = ImGuiWindowFlags_MenuBar;
-            ImGui::BeginChild(ImGui::GetID((void*)(intptr_t)i), ImVec2(child_w, 200.0f), true, child_flags);
-            if (scroll_to_off)
-                ImGui::SetScrollY(scroll_to_off_px);
-            if (scroll_to_pos)
-                ImGui::SetScrollFromPosY(ImGui::GetCursorStartPos().y + scroll_to_pos_px, i * 0.25f);
+            ImGui::BeginChild(ImGui::GetID((void*)(intptr_t)i), ImVec2(child_w, 200.0f), true);
+            if (scroll_to)
+                ImGui::SetScrollFromPosY(ImGui::GetCursorStartPos().y + scroll_to_px, i * 0.25f);
             for (int line = 0; line < 100; line++)
             {
                 if (track && line == track_line)
@@ -2104,7 +2087,7 @@ static void ShowDemoWindowLayout()
             float scroll_y = ImGui::GetScrollY();
             float scroll_max_y = ImGui::GetScrollMaxY();
             ImGui::EndChild();
-            ImGui::Text("%.0f/%.0f", scroll_y, scroll_max_y);
+            ImGui::Text("%.0f/%0.f", scroll_y, scroll_max_y);
             ImGui::EndGroup();
         }
         ImGui::TreePop();
@@ -2154,97 +2137,6 @@ static void ShowDemoWindowLayout()
             ImGui::SetScrollX(ImGui::GetScrollX() + scroll_x_delta);
             ImGui::EndChild();
         }
-        ImGui::Spacing();
-
-        static bool show_horizontal_contents_size_demo_window = false;
-        ImGui::Checkbox("Show Horizontal contents size demo window", &show_horizontal_contents_size_demo_window);
-
-        if (show_horizontal_contents_size_demo_window)
-        {
-            static bool show_h_scrollbar = true;
-            static bool show_button = true;
-            static bool show_tree_nodes = true;
-            static bool show_text_wrapped = false;
-            static bool show_columns = true;
-            static bool show_tab_bar = true;
-            static bool show_child = false;
-            static bool explicit_content_size = false;
-            static float contents_size_x = 300.0f;
-            if (explicit_content_size)
-                ImGui::SetNextWindowContentSize(ImVec2(contents_size_x, 0.0f));
-            ImGui::Begin("Horizontal contents size demo window", &show_horizontal_contents_size_demo_window, show_h_scrollbar ? ImGuiWindowFlags_HorizontalScrollbar : 0);
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2, 0));
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 0));
-            HelpMarker("Test of different widgets react and impact the work rectangle growing when horizontal scrolling is enabled.\n\nUse 'Metrics->Tools->Show windows rectangles' to visualize rectangles.");
-            ImGui::Checkbox("H-scrollbar", &show_h_scrollbar);
-            ImGui::Checkbox("Button", &show_button);            // Will grow contents size (unless explicitly overwritten)
-            ImGui::Checkbox("Tree nodes", &show_tree_nodes);    // Will grow contents size and display highlight over full width
-            ImGui::Checkbox("Text wrapped", &show_text_wrapped);// Will grow and use contents size
-            ImGui::Checkbox("Columns", &show_columns);          // Will use contents size
-            ImGui::Checkbox("Tab bar", &show_tab_bar);          // Will use contents size
-            ImGui::Checkbox("Child", &show_child);              // Will grow and use contents size
-            ImGui::Checkbox("Explicit content size", &explicit_content_size);
-            ImGui::Text("Scroll %.1f/%.1f %.1f/%.1f", ImGui::GetScrollX(), ImGui::GetScrollMaxX(), ImGui::GetScrollY(), ImGui::GetScrollMaxY());
-            if (explicit_content_size)
-            {
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(100);
-                ImGui::DragFloat("##csx", &contents_size_x);
-                ImVec2 p = ImGui::GetCursorScreenPos(); 
-                ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + 10, p.y + 10), IM_COL32_WHITE);
-                ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(p.x + contents_size_x - 10, p.y), ImVec2(p.x + contents_size_x, p.y + 10), IM_COL32_WHITE);
-                ImGui::Dummy(ImVec2(0, 10));
-            }
-            ImGui::PopStyleVar(2);
-            ImGui::Separator();
-            if (show_button)
-            {
-                ImGui::Button("this is a 300-wide button", ImVec2(300, 0));
-            }
-            if (show_tree_nodes)
-            {
-                bool open = true;
-                if (ImGui::TreeNode("this is a tree node"))
-                {
-                    if (ImGui::TreeNode("another one of those tree node..."))
-                    {
-                        ImGui::Text("Some tree contents");
-                        ImGui::TreePop();
-                    }
-                    ImGui::TreePop();
-                }
-                ImGui::CollapsingHeader("CollapsingHeader", &open);
-            }
-            if (show_text_wrapped)
-            {
-                ImGui::TextWrapped("This text should automatically wrap on the edge of the work rectangle.");
-            }
-            if (show_columns)
-            {
-                ImGui::Columns(4);
-                for (int n = 0; n < 4; n++)
-                {
-                    ImGui::Text("Width %.2f", ImGui::GetColumnWidth());
-                    ImGui::NextColumn();
-                }
-                ImGui::Columns(1);
-            }
-            if (show_tab_bar && ImGui::BeginTabBar("Hello"))
-            {
-                if (ImGui::BeginTabItem("OneOneOne")) { ImGui::EndTabItem(); }
-                if (ImGui::BeginTabItem("TwoTwoTwo")) { ImGui::EndTabItem(); }
-                if (ImGui::BeginTabItem("ThreeThreeThree")) { ImGui::EndTabItem(); }
-                if (ImGui::BeginTabItem("FourFourFour")) { ImGui::EndTabItem(); }
-                ImGui::EndTabBar();
-            }
-            if (show_child)
-            {
-                ImGui::BeginChild("child", ImVec2(0,0), true);
-                ImGui::EndChild();
-            }
-            ImGui::End();
-        }
-
         ImGui::TreePop();
     }
 
@@ -2272,7 +2164,7 @@ static void ShowDemoWindowPopups()
     // The properties of popups windows are:
     // - They block normal mouse hovering detection outside them. (*)
     // - Unless modal, they can be closed by clicking anywhere outside them, or by pressing ESCAPE.
-    // - Their visibility state (~bool) is held internally by Dear ImGui instead of being held by the programmer as we are used to with regular Begin() calls.
+    // - Their visibility state (~bool) is held internally by imgui instead of being held by the programmer as we are used to with regular Begin() calls.
     //   User can manipulate the visibility state by calling OpenPopup().
     // (*) One can use IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup) to bypass it and detect hovering even when normally blocked by a popup.
     // Those three properties are connected. The library needs to hold their visibility state because it can close popups at any time.
@@ -2872,7 +2764,7 @@ static void ShowDemoWindowMisc()
 
 //-----------------------------------------------------------------------------
 // [SECTION] About Window / ShowAboutWindow()
-// Access from Dear ImGui Demo -> Help -> About
+// Access from ImGui Demo -> Help -> About
 //-----------------------------------------------------------------------------
 
 void ImGui::ShowAboutWindow(bool* p_open)

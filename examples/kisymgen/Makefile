@@ -14,7 +14,7 @@
 #CXX = g++
 #CXX = clang++
 
-EXE = example_glfw_opengl3
+EXE = kisymgen
 SOURCES = main.cpp
 SOURCES += ../imgui_impl_glfw.cpp ../imgui_impl_opengl3.cpp
 SOURCES += ../../imgui.cpp ../../imgui_demo.cpp ../../imgui_draw.cpp ../../imgui_widgets.cpp

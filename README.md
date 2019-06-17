@@ -30,3 +30,19 @@ Prebuilt binaries are present for linux and windows in the prebuilt folder
 Usage 
 
 ![](assets/KiSymGen.gif)
+
+Import the generated symbol to kicad 
+
+![](assets/import_kicad.gif)
+
+
+TODO
+*	Add Support for millimeter metric unit
+*	Add Intutive numbering. Currently auto numbering top -> bottom with left right decal and counter clockwise for pins on all four side.
+*	Add support for pin naming using a table view.
+*	Add Multi unit part support.
+*	Add support for demorgans and triangle parts.
+*	Ongoing bug fixes if any.
+*	refactor code to improve readability.
+
+

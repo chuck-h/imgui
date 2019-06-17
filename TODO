@@ -1,0 +1,7 @@
+1)	Add support for triangle and de-morgan symbol type.
+2)	Add support for multi-unit part currently only supports 1 unit.
+3)	Add support for editing pin names. currently does not support pin naming as it has to be done in kicad.
+4)	if possible add a pin table type view where user can edit pin names in a tabluar form. 
+5)	pin numbering currently automatic i.e. top to down for pin on two side symbol and counter clockwise for pin on all side symbol.
+6) Add feature to specify the output folder.
+

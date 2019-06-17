@@ -25,3 +25,4 @@ Download this repo Navigate to kisyngen/kisymgen_src folder
 
 *	run make
 
+Prebuilt binaries are present for linux and windows in the prebuilt folder

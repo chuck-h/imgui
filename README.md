@@ -5,7 +5,7 @@ KiSymGen is developed based on imgui and GLFW3.
 
 Build On windows. 
 
-Tested with wisual studio 2017.
+Tested with visual studio 2017.
 
 *	Navigate to the kisymgen folder.
 *	Double click on the kisymgen.sln file which should open the project in visual studio.
@@ -25,7 +25,7 @@ Download this repo Navigate to kisyngen/kisymgen_src folder
 
 *	run make
 
-Prebuilt binaries are present for linux and windows in the prebuilt folder
+Prebuilt binaries are present for linux and windows in the prebuilt folder in branch prebuilt 
 
 Usage 
 
